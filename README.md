@@ -4,6 +4,8 @@ A self-hosted Telegram bot that downloads media from YouTube, TikTok, Instagram,
 
 Send a link, pick your format and quality, get the file delivered right in the chat.
 
+![Bot conversation](images/bot.png)
+
 ## Features
 
 - Multi-platform support (YouTube, TikTok, Instagram, Twitter, Reddit, and 1000+ more via yt-dlp)
@@ -14,7 +16,10 @@ Send a link, pick your format and quality, get the file delivered right in the c
 - Files up to 2GB via self-hosted Telegram Bot API
 - Automatic file cleanup (configurable age and disk limits)
 - Concurrent download limiting (prevents resource exhaustion)
+- Admin dashboard with download stats, history, error tracking, and disk management
 - Web UI included (reclip's built-in web interface)
+
+![Admin dashboard](images/admin.png)
 
 ## Architecture
 
@@ -22,19 +27,22 @@ Send a link, pick your format and quality, get the file delivered right in the c
 Telegram User ──> Self-hosted Bot API (2GB limit)
                         │
                         ▼
-                   reclip_bot (python-telegram-bot + httpx)
-                        │
-                        ▼
-                   reclip (Flask + yt-dlp + ffmpeg)
-                        │
-                        ▼
-                   Shared volume: /downloads/
+                   bot (python-telegram-bot + httpx)
+                   │              │
+          HTTP     │              │  HTTP events
+                   ▼              ▼
+              reclip (Flask)   dashboard (FastAPI)
+              port 8899        port 8080
+                               │
+                               ▼
+                            SQLite
 ```
 
-Three Docker containers via docker-compose:
+Four Docker containers via docker-compose:
 1. **reclip** - Media download engine with REST API and web UI
 2. **bot** - Telegram bot that wraps reclip's API
 3. **telegram-bot-api** - Self-hosted Telegram Bot API server for 2GB upload limit
+4. **dashboard** - Admin panel with download stats, history, errors, and file management
 
 ## Quick Start
 
@@ -95,6 +103,20 @@ All configuration is via environment variables in `.env`:
 | `CLEANUP_MAX_AGE_HOURS` | 1 | Delete files older than this |
 | `CLEANUP_MAX_DISK_MB` | 5000 | Max disk usage before cleanup |
 | `CLEANUP_INTERVAL_SECONDS` | 300 | Cleanup check interval |
+| `DASHBOARD_USER` | admin | Dashboard login username |
+| `DASHBOARD_PASSWORD` | (required) | Dashboard login password |
+| `DASHBOARD_PORT` | 8080 | Dashboard port on host |
+| `DASHBOARD_SECRET_KEY` | change-me | Cookie signing key |
+
+## Admin Dashboard
+
+The admin dashboard is available at http://localhost:8080 after starting the services. Log in with the credentials from your `.env` file.
+
+Pages:
+- **Dashboard** — downloads today, active users, disk usage, error rate, charts
+- **History** — full download log with filters and pagination
+- **Errors** — failed downloads with error messages
+- **Admin** — file management, system info, purge controls
 
 ## Web UI
 
@@ -138,13 +160,23 @@ BOT_TOKEN=your-token RECLIP_URL=http://localhost:8899 DOWNLOADS_PATH=../reclip/d
 
 ```
 reclip_bot/
-├── docker-compose.yml      # 3 services: reclip, bot, telegram-bot-api
+├── docker-compose.yml      # 4 services: reclip, bot, telegram-bot-api, dashboard
 ├── .env.example             # Environment variables template
 ├── bot/
 │   ├── bot.py               # Bot entry point
 │   ├── handlers.py          # Telegram message/callback handlers
 │   ├── reclip_client.py     # Async HTTP client for reclip API
+│   ├── event_client.py      # Fire-and-forget events to dashboard
 │   ├── cleanup.py           # Background file cleanup task
+│   ├── requirements.txt
+│   └── Dockerfile
+├── dashboard/
+│   ├── main.py              # FastAPI app with background tasks
+│   ├── db.py                # SQLite queries (async via aiosqlite)
+│   ├── auth.py              # Session cookie auth
+│   ├── routes/              # API + page routes
+│   ├── templates/           # Jinja2 templates (dark theme)
+│   ├── static/              # CSS + Chart.js frontend
 │   ├── requirements.txt
 │   └── Dockerfile
 └── reclip/                  # Fork of averygan/reclip with enhancements
