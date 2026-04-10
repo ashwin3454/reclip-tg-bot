@@ -17,9 +17,9 @@
   </div>
 
   <div class="disk-summary">
-    <span class="text-secondary">Total: <span class="mono">{{ "%.1f"|format(disk_total / 1073741824) }} GB</span></span>
-    <span class="text-secondary">Used: <span class="mono">{{ "%.1f"|format(disk_used / 1073741824) }} GB</span></span>
-    <span class="text-secondary">Free: <span class="mono">{{ "%.1f"|format(disk_free / 1073741824) }} GB</span></span>
+    <span class="text-secondary">Downloads: <span class="mono">{% if downloads_bytes >= 1073741824 %}{{ "%.1f"|format(downloads_bytes / 1073741824) }} GB{% elif downloads_bytes >= 1048576 %}{{ "%.1f"|format(downloads_bytes / 1048576) }} MB{% else %}{{ "%.1f"|format(downloads_bytes / 1024) }} KB{% endif %}</span></span>
+    <span class="text-secondary">Limit: <span class="mono">{{ "%.1f"|format(max_disk_mb / 1024) }} GB</span></span>
+    <span class="text-secondary">Usage: <span class="mono">{{ disk_pct }}%</span></span>
   </div>
 
   <div class="table-scroll">
@@ -80,20 +80,20 @@
   <table class="info-table">
     <tbody>
       <tr>
-        <td class="info-key">Disk Total</td>
-        <td class="mono">{{ "%.2f"|format(disk_total / 1073741824) }} GB</td>
-      </tr>
-      <tr>
-        <td class="info-key">Disk Used</td>
-        <td class="mono">{{ "%.2f"|format(disk_used / 1073741824) }} GB ({{ "%.1f"|format(disk_used / disk_total * 100) if disk_total else 0 }}%)</td>
-      </tr>
-      <tr>
-        <td class="info-key">Disk Free</td>
-        <td class="mono">{{ "%.2f"|format(disk_free / 1073741824) }} GB</td>
-      </tr>
-      <tr>
-        <td class="info-key">Files in Downloads</td>
+        <td class="info-key">Files in downloads</td>
         <td class="mono">{{ files|length }}</td>
+      </tr>
+      <tr>
+        <td class="info-key">Space used by downloads</td>
+        <td class="mono">{% if downloads_bytes >= 1073741824 %}{{ "%.2f"|format(downloads_bytes / 1073741824) }} GB{% elif downloads_bytes >= 1048576 %}{{ "%.1f"|format(downloads_bytes / 1048576) }} MB{% else %}{{ downloads_bytes }} B{% endif %}</td>
+      </tr>
+      <tr>
+        <td class="info-key">Cleanup limit</td>
+        <td class="mono">{{ max_disk_mb }} MB ({{ "%.1f"|format(max_disk_mb / 1024) }} GB)</td>
+      </tr>
+      <tr>
+        <td class="info-key">Usage</td>
+        <td class="mono">{{ disk_pct }}%</td>
       </tr>
     </tbody>
   </table>

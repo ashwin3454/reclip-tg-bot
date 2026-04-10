@@ -130,10 +130,13 @@ async def admin_page(request: Request) -> HTMLResponse:
 
     downloads_path = Path(os.environ.get("DOWNLOADS_PATH", "/downloads"))
     files = []
+    downloads_bytes = 0
     if downloads_path.exists():
         for f in sorted(downloads_path.iterdir()):
             try:
                 stat = f.stat()
+                if f.is_file():
+                    downloads_bytes += stat.st_size
                 files.append({
                     "name": f.name,
                     "size": stat.st_size,
@@ -142,15 +145,17 @@ async def admin_page(request: Request) -> HTMLResponse:
             except OSError:
                 pass
 
-    disk_total, disk_used, disk_free = shutil.disk_usage(str(downloads_path) if downloads_path.exists() else "/")
+    max_disk_mb = int(os.environ.get("CLEANUP_MAX_DISK_MB", "5000"))
+    max_disk_bytes = max_disk_mb * 1024 * 1024
+    disk_pct = round(downloads_bytes / max_disk_bytes * 100, 1) if max_disk_bytes else 0
 
     return templates.TemplateResponse(
         request, "admin.html",
         {
             "user": user,
             "files": files,
-            "disk_total": disk_total,
-            "disk_used": disk_used,
-            "disk_free": disk_free,
+            "downloads_bytes": downloads_bytes,
+            "max_disk_mb": max_disk_mb,
+            "disk_pct": disk_pct,
         },
     )
