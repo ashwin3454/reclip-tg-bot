@@ -18,6 +18,7 @@ from reclip_client import (
     poll_status,
     start_download,
 )
+import event_client
 
 logger = logging.getLogger(__name__)
 
@@ -212,6 +213,22 @@ async def _direct_download(update: Update, status_msg, url: str, fmt: str, forma
         _stats["errors"] += 1
         return
 
+    try:
+        await event_client.send_download_start(
+            job_id=job_id,
+            user_id=update.effective_user.id,
+            username=update.effective_user.username or str(update.effective_user.id),
+            chat_id=update.effective_chat.id,
+            url=url,
+            platform=info.get("extractor", "unknown"),
+            format=fmt,
+            quality=format_id or "best",
+            title=title,
+        )
+    except Exception:
+        pass
+
+    _direct_download_start = time.time()
     file_path = None
     for _ in range(450):
         await asyncio.sleep(2)
@@ -220,6 +237,7 @@ async def _direct_download(update: Update, status_msg, url: str, fmt: str, forma
         except ReclipServiceDown:
             await _edit_safe(status_msg, "Download service unavailable.")
             _stats["errors"] += 1
+            await event_client.send_download_error(job_id=job_id, error_message="Download service unavailable")
             return
         except ReclipError:
             continue
@@ -231,11 +249,23 @@ async def _direct_download(update: Update, status_msg, url: str, fmt: str, forma
         elif st == "error":
             await _edit_safe(status_msg, f"Error: {status.get('error', 'Unknown error')}")
             _stats["errors"] += 1
+            await event_client.send_download_error(job_id=job_id, error_message=status.get("error", "Unknown error"))
             return
         else:
             progress = status.get("progress")
             if progress and isinstance(progress, dict) and progress.get("percent") is not None:
                 text = f"Downloading... {progress['percent']}%"
+                try:
+                    await event_client.send_progress(
+                        job_id=job_id,
+                        percent=progress.get("percent"),
+                        speed=progress.get("speed"),
+                        eta=progress.get("eta"),
+                        downloaded_bytes=progress.get("downloaded_bytes"),
+                        total_bytes=progress.get("total_bytes"),
+                    )
+                except Exception:
+                    pass
             else:
                 text = "Downloading..."
             try:
@@ -246,6 +276,7 @@ async def _direct_download(update: Update, status_msg, url: str, fmt: str, forma
     if not file_path:
         await _edit_safe(status_msg, "Download timed out.")
         _stats["errors"] += 1
+        await event_client.send_download_error(job_id=job_id, error_message="Download timed out")
         return
 
     local_path = Path(DOWNLOADS_PATH) / Path(file_path).name
@@ -254,6 +285,7 @@ async def _direct_download(update: Update, status_msg, url: str, fmt: str, forma
     if not local_path.exists():
         await _edit_safe(status_msg, "File not found after download.")
         _stats["errors"] += 1
+        await event_client.send_download_error(job_id=job_id, error_message="File not found after download")
         return
 
     for attempt in range(2):
@@ -264,6 +296,15 @@ async def _direct_download(update: Update, status_msg, url: str, fmt: str, forma
                 else:
                     await update.message.chat.send_document(document=f, caption=title)
             _stats["downloads"] += 1
+            try:
+                await event_client.send_download_done(
+                    job_id=job_id,
+                    file_size_bytes=local_path.stat().st_size,
+                    duration_seconds=time.time() - _direct_download_start,
+                    filename=local_path.name,
+                )
+            except Exception:
+                pass
             break
         except Exception:
             if attempt == 0:
@@ -271,6 +312,7 @@ async def _direct_download(update: Update, status_msg, url: str, fmt: str, forma
             else:
                 await _edit_safe(status_msg, "Failed to upload file to Telegram.")
                 _stats["errors"] += 1
+                await event_client.send_download_error(job_id=job_id, error_message="Failed to upload to Telegram")
                 return
 
     try:
@@ -503,6 +545,21 @@ async def download_and_send(query, entry: dict, format: str, format_id: str | No
         _stats["errors"] += 1
         return
 
+    try:
+        await event_client.send_download_start(
+            job_id=job_id,
+            user_id=entry["user_id"],
+            username=str(entry.get("user_id", "")),
+            chat_id=chat_id,
+            url=url,
+            platform=entry["info"].get("extractor", "unknown"),
+            format=format,
+            quality=format_id or "best",
+            title=title,
+        )
+    except Exception:
+        pass
+
     file_path = None
     for _ in range(450):
         await asyncio.sleep(2)
@@ -511,6 +568,7 @@ async def download_and_send(query, entry: dict, format: str, format_id: str | No
         except ReclipServiceDown:
             await _edit_safe(message, "Download service temporarily unavailable.")
             _stats["errors"] += 1
+            await event_client.send_download_error(job_id=job_id, error_message="Download service temporarily unavailable")
             return
         except ReclipError:
             continue
@@ -522,11 +580,23 @@ async def download_and_send(query, entry: dict, format: str, format_id: str | No
         elif st == "error":
             await _edit_safe(message, f"Error: {status.get('error', 'Unknown error')}")
             _stats["errors"] += 1
+            await event_client.send_download_error(job_id=job_id, error_message=status.get("error", "Unknown error"))
             return
         else:
             progress = status.get("progress")
             if progress and isinstance(progress, dict) and progress.get("percent") is not None:
                 text = f"Downloading... {progress['percent']}%"
+                try:
+                    await event_client.send_progress(
+                        job_id=job_id,
+                        percent=progress.get("percent"),
+                        speed=progress.get("speed"),
+                        eta=progress.get("eta"),
+                        downloaded_bytes=progress.get("downloaded_bytes"),
+                        total_bytes=progress.get("total_bytes"),
+                    )
+                except Exception:
+                    pass
             else:
                 text = "Downloading..."
             try:
@@ -540,6 +610,7 @@ async def download_and_send(query, entry: dict, format: str, format_id: str | No
     if not file_path:
         await _edit_safe(message, "Download timed out.")
         _stats["errors"] += 1
+        await event_client.send_download_error(job_id=job_id, error_message="Download timed out")
         return
 
     local_path = Path(DOWNLOADS_PATH) / Path(file_path).name
@@ -548,6 +619,7 @@ async def download_and_send(query, entry: dict, format: str, format_id: str | No
     if not local_path.exists():
         await _edit_safe(message, "File not found after download.")
         _stats["errors"] += 1
+        await event_client.send_download_error(job_id=job_id, error_message="File not found after download")
         return
 
     for attempt in range(2):
@@ -560,6 +632,15 @@ async def download_and_send(query, entry: dict, format: str, format_id: str | No
                 else:
                     await query.message.chat.send_document(document=f, caption=title)
             _stats["downloads"] += 1
+            try:
+                await event_client.send_download_done(
+                    job_id=job_id,
+                    file_size_bytes=local_path.stat().st_size,
+                    duration_seconds=time.time() - entry["created"],
+                    filename=local_path.name,
+                )
+            except Exception:
+                pass
             break
         except Exception:
             if attempt == 0:
@@ -569,6 +650,7 @@ async def download_and_send(query, entry: dict, format: str, format_id: str | No
                 logger.exception("Upload failed after retry")
                 await _edit_safe(message, "Failed to upload file to Telegram.")
                 _stats["errors"] += 1
+                await event_client.send_download_error(job_id=job_id, error_message="Failed to upload to Telegram")
                 return
 
     try:
