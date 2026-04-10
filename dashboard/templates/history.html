@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><title>reclip admin — history</title></head>
+<body>
+<h1>Download History</h1>
+<p><a href="/">Dashboard</a> | <a href="/logout">Logout</a></p>
+<p>Page {{ data.page }} of {{ data.pages }} ({{ data.total }} total)</p>
+{% for row in data.rows %}
+<div>{{ row.job_id }} — {{ row.status }} — {{ row.url }}</div>
+{% endfor %}
+</body>
+</html>

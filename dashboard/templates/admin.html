@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><title>reclip admin — admin</title></head>
+<body>
+<h1>Admin</h1>
+<p><a href="/">Dashboard</a> | <a href="/logout">Logout</a></p>
+<h2>Files ({{ files|length }})</h2>
+{% for f in files %}
+<div>{{ f.name }} — {{ f.size }} bytes</div>
+{% endfor %}
+<h2>Disk</h2>
+<p>Total: {{ disk_total }} | Used: {{ disk_used }} | Free: {{ disk_free }}</p>
+</body>
+</html>

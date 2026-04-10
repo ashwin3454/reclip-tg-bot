@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><title>reclip admin — errors</title></head>
+<body>
+<h1>Download Errors</h1>
+<p><a href="/">Dashboard</a> | <a href="/logout">Logout</a></p>
+{% for row in errors %}
+<div>{{ row.job_id }} — {{ row.error_message }}</div>
+{% endfor %}
+</body>
+</html>
