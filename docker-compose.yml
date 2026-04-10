@@ -23,6 +23,7 @@ services:
       - CLEANUP_MAX_AGE_HOURS=${CLEANUP_MAX_AGE_HOURS:-1}
       - CLEANUP_MAX_DISK_MB=${CLEANUP_MAX_DISK_MB:-5000}
       - CLEANUP_INTERVAL_SECONDS=${CLEANUP_INTERVAL_SECONDS:-300}
+      - DASHBOARD_URL=http://dashboard:8080
     volumes:
       - downloads:/downloads
     depends_on:
@@ -44,6 +45,26 @@ services:
       - internal
     restart: unless-stopped
 
+  dashboard:
+    build: ./dashboard
+    environment:
+      - ADMIN_USER=${DASHBOARD_USER:-admin}
+      - ADMIN_PASSWORD=${DASHBOARD_PASSWORD}
+      - DB_PATH=/data/reclip_bot.db
+      - DOWNLOADS_PATH=/downloads
+      - RECLIP_URL=http://reclip:8899
+      - SECRET_KEY=${DASHBOARD_SECRET_KEY:-change-me-in-production}
+    volumes:
+      - dashboard-data:/data
+      - downloads:/downloads:ro
+    ports:
+      - "${DASHBOARD_PORT:-8080}:8080"
+    depends_on:
+      - reclip
+    networks:
+      - internal
+    restart: unless-stopped
+
   # Optional: expose reclip web UI on host
   # Uncomment to access web UI at http://localhost:8899
   # reclip-web:
@@ -57,6 +78,7 @@ services:
 volumes:
   downloads:
   telegram-bot-api-data:
+  dashboard-data:
 
 networks:
   internal:
