@@ -36,99 +36,63 @@ def require_auth(request: Request) -> str:
 # Event ingestion (no auth — internal Docker network only)
 # ---------------------------------------------------------------------------
 
-class DownloadStartEvent(BaseModel):
-    job_id: str
-    user_id: Optional[int] = None
-    username: Optional[str] = None
-    chat_id: Optional[int] = None
-    url: str
-    platform: Optional[str] = None
+@router.post("/api/events")
+async def ingest_event(request: Request) -> Dict[str, str]:
+    """Accept download lifecycle events. No auth — internal network only.
 
-
-class DownloadProgressEvent(BaseModel):
-    job_id: str
-    progress: Optional[float] = None
-    speed: Optional[str] = None
-    eta: Optional[str] = None
-
-
-class DownloadDoneEvent(BaseModel):
-    job_id: str
-    title: Optional[str] = None
-    format: Optional[str] = None
-    quality: Optional[str] = None
-    file_size_bytes: Optional[int] = None
-    download_duration_sec: Optional[float] = None
-
-
-class DownloadErrorEvent(BaseModel):
-    job_id: str
-    error_message: str
-
-
-class EventEnvelope(BaseModel):
-    type: str
-    data: Dict[str, Any]
-
-
-@router.post("/api/events", status_code=204)
-async def ingest_event(envelope: EventEnvelope) -> None:
-    """Accept download lifecycle events. No auth — internal network only."""
-    event_type = envelope.type
-    data = envelope.data
+    Bot sends flat JSON: {"type": "download_start", "job_id": "...", ...}
+    """
+    data = await request.json()
+    event_type = data.get("type")
 
     if event_type == "download_start":
-        ev = DownloadStartEvent(**data)
         await db.insert_download_start(
-            job_id=ev.job_id,
-            user_id=ev.user_id,
-            username=ev.username,
-            chat_id=ev.chat_id,
-            url=ev.url,
-            platform=ev.platform,
+            job_id=data["job_id"],
+            user_id=data.get("user_id"),
+            username=data.get("username"),
+            chat_id=data.get("chat_id"),
+            url=data.get("url", ""),
+            platform=data.get("platform"),
         )
-        _active_downloads[ev.job_id] = {
-            "job_id": ev.job_id,
-            "user_id": ev.user_id,
-            "username": ev.username,
-            "url": ev.url,
-            "platform": ev.platform,
-            "progress": None,
-            "speed": None,
-            "eta": None,
+        _active_downloads[data["job_id"]] = {
+            "job_id": data["job_id"],
+            "user_id": data.get("user_id"),
+            "username": data.get("username"),
+            "url": data.get("url"),
+            "platform": data.get("platform"),
+            "title": data.get("title"),
+            "percent": 0,
+            "speed": 0,
+            "eta": 0,
         }
 
     elif event_type == "download_progress":
-        ev = DownloadProgressEvent(**data)
-        if ev.job_id in _active_downloads:
-            _active_downloads[ev.job_id].update({
-                "progress": ev.progress,
-                "speed": ev.speed,
-                "eta": ev.eta,
+        job_id = data.get("job_id")
+        if job_id and job_id in _active_downloads:
+            _active_downloads[job_id].update({
+                "percent": data.get("percent", 0),
+                "speed": data.get("speed", 0),
+                "eta": data.get("eta", 0),
+                "downloaded_bytes": data.get("downloaded_bytes", 0),
+                "total_bytes": data.get("total_bytes", 0),
             })
 
     elif event_type == "download_done":
-        ev = DownloadDoneEvent(**data)
         await db.update_download_done(
-            job_id=ev.job_id,
-            title=ev.title,
-            format=ev.format,
-            quality=ev.quality,
-            file_size_bytes=ev.file_size_bytes,
-            download_duration_sec=ev.download_duration_sec,
+            job_id=data["job_id"],
+            file_size_bytes=data.get("file_size_bytes"),
+            download_duration_sec=data.get("duration_seconds"),
         )
-        _active_downloads.pop(ev.job_id, None)
+        _active_downloads.pop(data["job_id"], None)
 
     elif event_type == "download_error":
-        ev = DownloadErrorEvent(**data)
         await db.update_download_error(
-            job_id=ev.job_id,
-            error_message=ev.error_message,
+            job_id=data["job_id"],
+            error_message=data.get("error_message", "Unknown error"),
         )
-        _active_downloads.pop(ev.job_id, None)
+        _active_downloads.pop(data["job_id"], None)
 
-    else:
-        raise HTTPException(status_code=400, detail=f"Unknown event type: {event_type}")
+    return {"status": "ok"}
 
 
 # ---------------------------------------------------------------------------
