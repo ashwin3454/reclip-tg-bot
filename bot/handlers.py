@@ -255,6 +255,11 @@ async def _direct_download(update: Update, status_msg, url: str, fmt: str, forma
         st = status.get("status")
         if st == "done":
             file_path = status.get("file_path") or status.get("filename")
+            video_meta = {
+                "width": status.get("width"),
+                "height": status.get("height"),
+                "duration": status.get("duration"),
+            }
             break
         elif st == "error":
             await _edit_safe(status_msg, f"Error: {status.get('error', 'Unknown error')}")
@@ -302,7 +307,15 @@ async def _direct_download(update: Update, status_msg, url: str, fmt: str, forma
         try:
             with open(local_path, "rb") as f:
                 if fmt == "video" and local_path.suffix.lower() == ".mp4":
-                    await update.message.chat.send_video(video=f, caption=_truncate_caption(title), supports_streaming=True)
+                    dur = video_meta.get("duration")
+                    await update.message.chat.send_video(
+                        video=f,
+                        caption=_truncate_caption(title),
+                        supports_streaming=True,
+                        width=video_meta.get("width"),
+                        height=video_meta.get("height"),
+                        duration=int(dur) if dur else None,
+                    )
                 else:
                     await update.message.chat.send_document(document=f, caption=_truncate_caption(title))
             _stats["downloads"] += 1
@@ -590,6 +603,11 @@ async def download_and_send(query, entry: dict, format: str, format_id: str | No
         st = status.get("status")
         if st == "done":
             file_path = status.get("file_path") or status.get("filename")
+            video_meta = {
+                "width": status.get("width"),
+                "height": status.get("height"),
+                "duration": status.get("duration"),
+            }
             break
         elif st == "error":
             await _edit_safe(message, f"Error: {status.get('error', 'Unknown error')}")
@@ -640,8 +658,14 @@ async def download_and_send(query, entry: dict, format: str, format_id: str | No
         try:
             with open(local_path, "rb") as f:
                 if format == "video" and local_path.suffix.lower() == ".mp4":
+                    dur = video_meta.get("duration")
                     await query.message.chat.send_video(
-                        video=f, caption=_truncate_caption(title), supports_streaming=True
+                        video=f,
+                        caption=_truncate_caption(title),
+                        supports_streaming=True,
+                        width=video_meta.get("width"),
+                        height=video_meta.get("height"),
+                        duration=int(dur) if dur else None,
                     )
                 else:
                     await query.message.chat.send_document(document=f, caption=_truncate_caption(title))

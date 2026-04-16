@@ -45,6 +45,13 @@ def _do_download(job_id, url, format_choice, format_id):
     cmd = [
         "yt-dlp", "--no-playlist", "-o", out_template,
         "--progress-template", PROGRESS_TEMPLATE,
+        "--force-ipv4",
+        "--downloader", "hls:ffmpeg",
+        "--concurrent-fragments", "4",
+        "--socket-timeout", "20",
+        "--retries", "5",
+        "--fragment-retries", "10",
+        "--throttled-rate", "50K",
     ]
 
     if format_choice == "audio":
@@ -52,16 +59,30 @@ def _do_download(job_id, url, format_choice, format_id):
     elif format_id:
         cmd += ["-f", f"{format_id}+bestaudio/best", "--merge-output-format", "mp4"]
     else:
-        cmd += ["-f", "bestvideo+bestaudio/best", "--merge-output-format", "mp4"]
+        cmd += ["-f", "bv*[vcodec~='^(avc|h264)']+ba/b[vcodec~='^(avc|h264)']/bv*+ba/b", "--merge-output-format", "mp4"]
 
     cmd.append(url)
 
-    try:
-        process = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-        )
+    process = subprocess.Popen(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
 
-        stderr_lines = []
+    timed_out = threading.Event()
+
+    def _kill_on_timeout():
+        timed_out.set()
+        try:
+            process.kill()
+        except Exception:
+            pass
+
+    deadline_timer = threading.Timer(DOWNLOAD_TIMEOUT, _kill_on_timeout)
+    deadline_timer.daemon = True
+    deadline_timer.start()
+
+    stderr_lines = []
+
+    def _read_stderr():
         for line in process.stderr:
             line = line.rstrip("\n")
             stderr_lines.append(line)
@@ -83,8 +104,21 @@ def _do_download(job_id, url, format_choice, format_id):
             except (json.JSONDecodeError, ValueError):
                 pass
 
-        returncode = process.wait(timeout=DOWNLOAD_TIMEOUT)
+    stderr_reader = threading.Thread(target=_read_stderr, daemon=True)
+    stderr_reader.start()
 
+    try:
+        returncode = process.wait()
+    finally:
+        deadline_timer.cancel()
+        stderr_reader.join(timeout=5)
+
+    if timed_out.is_set():
+        job["status"] = "error"
+        job["error"] = f"Download timed out ({DOWNLOAD_TIMEOUT // 60} min limit)"
+        return
+
+    try:
         if returncode != 0:
             job["status"] = "error"
             last_line = stderr_lines[-1] if stderr_lines else "Unknown error"
@@ -111,6 +145,72 @@ def _do_download(job_id, url, format_choice, format_id):
                 except OSError:
                     pass
 
+        if chosen.endswith(".mp4"):
+            try:
+                codec_probe = subprocess.run(
+                    ["ffprobe", "-v", "error", "-select_streams", "v:0",
+                     "-show_entries", "stream=codec_name",
+                     "-of", "default=noprint_wrappers=1:nokey=1", chosen],
+                    capture_output=True, text=True, timeout=10,
+                )
+                vcodec = (codec_probe.stdout or "").strip().lower()
+            except Exception:
+                vcodec = ""
+
+            if vcodec in ("av1", "vp9", "vp8"):
+                transcoded = chosen + ".h264.mp4"
+                try:
+                    r = subprocess.run(
+                        ["ffmpeg", "-y", "-i", chosen,
+                         "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+                         "-c:a", "aac", "-b:a", "128k",
+                         "-movflags", "+faststart",
+                         transcoded],
+                        capture_output=True, timeout=600,
+                    )
+                    if r.returncode == 0 and os.path.exists(transcoded) and os.path.getsize(transcoded) > 0:
+                        os.replace(transcoded, chosen)
+                    elif os.path.exists(transcoded):
+                        os.remove(transcoded)
+                except (subprocess.TimeoutExpired, OSError):
+                    if os.path.exists(transcoded):
+                        try: os.remove(transcoded)
+                        except OSError: pass
+            else:
+                faststart_tmp = chosen + ".fs.mp4"
+                try:
+                    subprocess.run(
+                        ["ffmpeg", "-y", "-i", chosen, "-c", "copy",
+                         "-movflags", "+faststart", faststart_tmp],
+                        capture_output=True, timeout=120,
+                    )
+                    if os.path.exists(faststart_tmp) and os.path.getsize(faststart_tmp) > 0:
+                        os.replace(faststart_tmp, chosen)
+                    elif os.path.exists(faststart_tmp):
+                        os.remove(faststart_tmp)
+                except (subprocess.TimeoutExpired, OSError):
+                    if os.path.exists(faststart_tmp):
+                        try: os.remove(faststart_tmp)
+                        except OSError: pass
+
+        if chosen.endswith(".mp4"):
+            try:
+                probe = subprocess.run(
+                    ["ffprobe", "-v", "error", "-select_streams", "v:0",
+                     "-show_entries", "stream=width,height:format=duration",
+                     "-of", "json", chosen],
+                    capture_output=True, text=True, timeout=10,
+                )
+                info = json.loads(probe.stdout)
+                stream = (info.get("streams") or [{}])[0]
+                fmt = info.get("format") or {}
+                job["width"] = stream.get("width")
+                job["height"] = stream.get("height")
+                dur = fmt.get("duration")
+                job["duration"] = float(dur) if dur else None
+            except Exception:
+                pass
+
         job["status"] = "done"
         job["file"] = chosen
         job["file_path"] = os.path.abspath(chosen)
@@ -122,11 +222,6 @@ def _do_download(job_id, url, format_choice, format_id):
             job["filename"] = f"{safe_title}{ext}" if safe_title else os.path.basename(chosen)
         else:
             job["filename"] = os.path.basename(chosen)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        process.wait()
-        job["status"] = "error"
-        job["error"] = f"Download timed out ({DOWNLOAD_TIMEOUT // 60} min limit)"
     except Exception as e:
         job["status"] = "error"
         job["error"] = str(e)
@@ -216,6 +311,9 @@ def check_status(job_id):
         "filename": job.get("filename"),
         "progress": job.get("progress"),
         "file_path": job.get("file_path"),
+        "width": job.get("width"),
+        "height": job.get("height"),
+        "duration": job.get("duration"),
     })
 
 
