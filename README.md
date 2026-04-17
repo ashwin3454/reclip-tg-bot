@@ -184,10 +184,6 @@ reclip_bot/
     └── static/
 ```
 
-## Credits
-
-- [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot) - Telegram bot framework
-
 ## License
 
 MIT
