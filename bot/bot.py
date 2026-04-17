@@ -43,8 +43,9 @@ def main():
 
     logger.info("Starting bot with API server: %s", api_url)
 
-    asyncio.get_event_loop().run_until_complete(wait_for_bot_api(api_url))
-
+# Skip waiting for self-hosted API (not needed on Railway)
+# asyncio.get_event_loop().run_until_complete(wait_for_bot_api(api_url))
+    
     app = (
         ApplicationBuilder()
         .token(bot_token)
