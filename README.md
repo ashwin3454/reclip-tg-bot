@@ -1,10 +1,8 @@
-# ReClip Telegram Bot
+# Telegram Video Downloader Bot
 
-A self-hosted Telegram bot that downloads media from YouTube, TikTok, Instagram, Twitter, Reddit, and 1000+ other sites. Powered by [reclip](https://github.com/averygan/reclip) and yt-dlp.
+A self-hosted Telegram bot that downloads media from YouTube, TikTok, Instagram, Twitter, Reddit, and 1000+ other sites.
 
 Send a link, pick your format and quality, get the file delivered right in the chat.
-
-![Bot conversation](images/bot.png)
 
 ## Features
 
@@ -56,7 +54,7 @@ Four Docker containers via docker-compose:
 
 1. Clone this repository:
 ```bash
-git clone https://github.com/gth-ai/reclip-telegram-bot.git
+git clone https://github.com/ashwin3454/reclip-tg-bot.git
 cd reclip_bot
 ```
 
@@ -188,8 +186,6 @@ reclip_bot/
 
 ## Credits
 
-- [reclip](https://github.com/averygan/reclip) by averygan - The media download engine
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp) - The download backend
 - [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot) - Telegram bot framework
 
 ## License
