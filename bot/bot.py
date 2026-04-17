@@ -37,7 +37,7 @@ def main():
         logger.error("BOT_TOKEN environment variable is required")
         sys.exit(1)
 
-    api_url = os.environ.get("TELEGRAM_BOT_API_URL", "http://telegram-bot-api:8081")
+    api_url = os.environ.get("TELEGRAM_BOT_API_URL", "https://api.telegram.org")
     base_url = f"{api_url}/bot"
     base_file_url = f"{api_url}/file/bot"
 
